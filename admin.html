@@ -84,6 +84,7 @@
   .card .acts { display: flex; gap: 8px; margin-top: auto; }
   .empty { background: var(--card); border: 1.5px dashed var(--line); border-radius: 12px; padding: 28px; color: var(--ink-soft); }
 
+  .handle { width: 18px; height: 18px; background: #fff; border: 3px solid var(--flame); border-radius: 4px; box-shadow: 0 1px 4px rgba(11, 19, 38, 0.5); cursor: grab; }
   .pin { filter: drop-shadow(0 2px 2px rgba(11, 19, 38, 0.45)); }
   #status { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 10px; max-width: calc(100% - 32px); z-index: 3000; }
   #status.bad { background: var(--red); }
@@ -188,10 +189,10 @@
       </div>
 
       <h2 style="margin-top:26px">Campus area</h2>
-      <p class="help" style="margin:0">Move and zoom the map until the campus fills the frame, then press the button. Players can’t scroll or zoom outside this area.</p>
+      <p class="help" style="margin:0">Drag the four corner handles until the orange box fits the campus. It can be any shape of rectangle. Players only see what’s inside the box.</p>
       <div class="map tall" id="areaMap"></div>
       <div class="row" style="margin-top:12px;align-items:center">
-        <button type="button" class="btn plain" id="useView">Use this view as the campus area</button>
+        <button type="button" class="btn plain" id="useView">Draw a new box here</button>
         <span class="help" id="areaNote" style="margin:0"></span>
       </div>
 
@@ -368,17 +369,39 @@
     areaMap = makeMap('areaMap');
     drawArea();
   }
+  var areaHandles = [];
+
   function drawArea() {
     if (areaRect) { areaRect.remove(); areaRect = null; }
+    areaHandles.forEach(function (h) { h.remove(); });
+    areaHandles = [];
     var b = campusBounds();
-    if (b) areaRect = L.rectangle(b, { color: '#f26a1b', weight: 3, fillOpacity: 0.08, interactive: false }).addTo(areaMap);
-    $('areaNote').textContent = b ? 'The orange box is the campus area.' : 'No campus area set yet.';
+    $('areaNote').textContent = b ? 'Drag the corners to resize the box.' : 'No campus area yet. Find your campus, then press the button.';
+    if (!b) return;
+
+    areaRect = L.rectangle(b, { color: '#f26a1b', weight: 3, fillOpacity: 0.08, interactive: false }).addTo(areaMap);
+    var icon = L.divIcon({ className: 'handle', iconSize: [18, 18], iconAnchor: [9, 9] });
+    // Corners in order, so the handle two places along is always the opposite corner.
+    [b.getSouthWest(), b.getNorthWest(), b.getNorthEast(), b.getSouthEast()].forEach(function (corner, i) {
+      var handle = L.marker(corner, { icon: icon, draggable: true, keyboard: false, title: 'Drag to resize' }).addTo(areaMap);
+      handle.on('drag', function () {
+        var p = handle.getLatLng();
+        var q = areaHandles[(i + 2) % 4].getLatLng();        // the opposite corner stays put
+        var box = L.latLngBounds(p, q);
+        area = { south: box.getSouth(), west: box.getWest(), north: box.getNorth(), east: box.getEast() };
+        areaRect.setBounds(box);
+        areaHandles[(i + 1) % 4].setLatLng([p.lat, q.lng]);
+        areaHandles[(i + 3) % 4].setLatLng([q.lat, p.lng]);
+        $('areaNote').textContent = 'Area changed. Press “Save settings” to keep it.';
+      });
+      areaHandles.push(handle);
+    });
   }
   $('useView').addEventListener('click', function () {
-    var b = areaMap.getBounds();
+    var b = areaMap.getBounds().pad(-0.2);     // a box comfortably inside the current view
     area = { south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() };
     drawArea();
-    $('areaNote').textContent = 'Area updated. Press “Save settings” to keep it.';
+    $('areaNote').textContent = 'Drag the corners to fit the campus, then press “Save settings”.';
   });
 
   // ---------- Tabs ----------
@@ -614,7 +637,7 @@
     $('saveSettings').disabled = false;
     if (res.error) { say('Couldn’t save the settings: ' + res.error.message, true); return; }
     Object.assign(settings, next);
-    if (area) $('areaNote').textContent = 'The orange box is the campus area.';
+    if (area) $('areaNote').textContent = 'Saved. Drag the corners any time to change it.';
     say('Settings saved.');
   });
 

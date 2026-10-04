@@ -82,7 +82,7 @@
   @keyframes flash { from { opacity: 0.95; } to { opacity: 0; } }
 
   .side { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; background: var(--card); border-left: 1px solid var(--line); }
-  #map { min-height: 0; background: #dfe6f0; }
+  #map { min-height: 0; background: #e6ebf3; }
   .action { padding: 12px 14px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 14px; min-height: 72px; }
   .action .hint { color: var(--ink-soft); margin-right: auto; }
   .result { margin-right: auto; min-width: 0; }
@@ -329,8 +329,11 @@
     });
   }
 
+  // Only fetch map tiles for the campus itself: less to download, so panning stays smooth.
+  function tileBounds() { return campus ? campus.pad(0.05) : undefined; }
+
   function viewBounds() {
-    if (campus) return campus.pad(0.08);
+    if (campus) return campus.pad(0.03);
     return L.latLng(FALLBACK_CENTER).toBounds(1500);
   }
 
@@ -339,22 +342,28 @@
   function streetLayer(maxZoom) {
     if (location.protocol === 'file:') {
       return L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
-        maxNativeZoom: 18, maxZoom: maxZoom,
+        maxNativeZoom: 18, maxZoom: maxZoom, keepBuffer: 4, bounds: tileBounds(),
         attribution: 'Map &copy; Esri and its data providers'
       });
     }
     return L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxNativeZoom: 19, maxZoom: maxZoom,
+      maxNativeZoom: 19, maxZoom: maxZoom, keepBuffer: 4, bounds: tileBounds(),
       referrerPolicy: 'strict-origin-when-cross-origin',
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     });
   }
 
   function initMap() {
-    map = L.map('map', { maxBoundsViscosity: 1, zoomSnap: 0.25, attributionControl: true });
+    map = L.map('map', {
+      maxBoundsViscosity: 1,
+      zoomSnap: 0,               // any zoom level, so the campus fits the panel exactly and pinch-zoom is fluid
+      zoomDelta: 0.5,            // gentler steps for the + / - buttons
+      wheelPxPerZoomLevel: 110,  // gentler steps for the mouse wheel
+      wheelDebounceTime: 20
+    });
     if (settings.map_style === 'satellite') {
       tiles = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        maxNativeZoom: 18, maxZoom: 20,
+        maxNativeZoom: 18, maxZoom: 20, keepBuffer: 4, bounds: tileBounds(),
         attribution: 'Imagery &copy; Esri, Maxar, Earthstar Geographics'
       });
     } else {
@@ -363,10 +372,10 @@
     tiles.addTo(map);
 
     if (campus) {
-      // Grey out everything that isn't campus, so the map reads as "just our campus".
+      // Cover everything that isn't campus, so the map shows the campus and nothing else.
       var world = [[-85, -179.9], [-85, 179.9], [85, 179.9], [85, -179.9]];
       var hole = [campus.getSouthWest(), campus.getNorthWest(), campus.getNorthEast(), campus.getSouthEast()];
-      L.polygon([world, hole], { stroke: false, fillColor: '#14213d', fillOpacity: 0.62, interactive: false }).addTo(map);
+      L.polygon([world, hole], { stroke: false, fillColor: '#e6ebf3', fillOpacity: 1, interactive: false }).addTo(map);
       L.rectangle(campus, { color: '#f26a1b', weight: 2, fill: false, interactive: false }).addTo(map);
     }
     overlay = L.layerGroup().addTo(map);
@@ -388,8 +397,20 @@
 
   function onMapClick(e) {
     if (!game || game.phase !== 'guess') return;
+    if (campus && !campus.contains(e.latlng)) {
+      $('hint').textContent = 'Place your pin inside the campus area.';
+      return;
+    }
     if (!game.guessMarker) {
-      game.guessMarker = L.marker(e.latlng, { icon: pinIcon('#f26a1b', '#fff'), draggable: true, keyboard: false }).addTo(overlay);
+      var marker = L.marker(e.latlng, { icon: pinIcon('#f26a1b', '#fff'), draggable: true, keyboard: false }).addTo(overlay);
+      marker.on('drag', function () {          // a dragged pin can't leave the campus either
+        if (!campus) return;
+        var p = marker.getLatLng();
+        var lat = Math.min(Math.max(p.lat, campus.getSouth()), campus.getNorth());
+        var lng = Math.min(Math.max(p.lng, campus.getWest()), campus.getEast());
+        if (lat !== p.lat || lng !== p.lng) marker.setLatLng([lat, lng]);
+      });
+      game.guessMarker = marker;
     } else {
       game.guessMarker.setLatLng(e.latlng);
     }
@@ -399,12 +420,15 @@
 
   // ---------- Game ----------
 
+  var FULL_WITHIN = 5;     // metres: this close or closer scores full points
+  var ZERO_BEYOND = 500;   // metres: this far or farther scores nothing
+  var STRICTNESS = 3;      // 1 = straight line; higher = points drop off faster
+
   function scoreFor(distance) {
-    var b = viewBounds();
-    var diagonal = b.getSouthWest().distanceTo(b.getNorthEast());
-    var scale = Math.max(diagonal * 0.18, 40);   // bigger campus = more forgiving
-    if (distance <= 8) return MAX_POINTS;        // within a few steps counts as perfect
-    return Math.round(MAX_POINTS * Math.exp(-(distance - 8) / scale));
+    if (distance <= FULL_WITHIN) return MAX_POINTS;
+    if (distance >= ZERO_BEYOND) return 0;
+    var t = (distance - FULL_WITHIN) / (ZERO_BEYOND - FULL_WITHIN);
+    return Math.round(MAX_POINTS * Math.pow(1 - t, STRICTNESS));
   }
 
   function startGame(mode) {
