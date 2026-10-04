@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Admin panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root {
+    --ink: #14213d;
+    --ink-soft: #4a5876;
+    --mist: #eef2f7;
+    --card: #ffffff;
+    --line: #d3dbe8;
+    --flame: #f26a1b;
+    --flame-dark: #c9510c;
+    --marigold: #ffc233;
+    --red: #b3261e;
+    --display: "Bricolage Grotesque", "Trebuchet MS", system-ui, sans-serif;
+    --body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: var(--body); color: var(--ink); background: var(--mist); font-size: 16px; line-height: 1.5; }
+  h1, h2 { font-family: var(--display); font-weight: 800; line-height: 1.1; margin: 0; }
+  h2 { font-size: 1.35rem; margin-bottom: 14px; }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; opacity: 0.55; }
+  :focus-visible { outline: 3px solid var(--marigold); outline-offset: 2px; }
+
+  .btn { border: 0; border-radius: 9px; padding: 10px 16px; font-weight: 600; background: var(--flame); color: #fff; }
+  .btn:hover:not(:disabled) { background: var(--flame-dark); }
+  .btn.plain { background: var(--card); color: var(--ink); border: 1.5px solid var(--line); }
+  .btn.plain:hover:not(:disabled) { background: var(--mist); }
+  .btn.danger { background: var(--card); color: var(--red); border: 1.5px solid #e6b8b4; }
+  .btn.small { padding: 6px 11px; font-size: 0.9rem; }
+
+  label { display: block; font-weight: 600; margin: 14px 0 5px; }
+  .help { color: var(--ink-soft); font-size: 0.92rem; margin: 4px 0 0; }
+  input[type=text], input[type=email], input[type=password], input[type=number], select {
+    width: 100%; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 9px; background: #fff;
+  }
+  input[type=file] { width: 100%; }
+
+  .box { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
+  .notice { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
+  .notice .box { width: 100%; max-width: 420px; }
+  .notice code { background: var(--mist); padding: 1px 6px; border-radius: 5px; }
+  .error { color: var(--red); font-weight: 600; margin: 12px 0 0; }
+
+  .top { background: var(--ink); color: #fff; padding: 12px 18px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+  .top h1 { font-size: 1.2rem; margin-right: auto; }
+  .top a { color: #fff; }
+  .top .who { color: #b9c5dc; font-size: 0.92rem; }
+  .top .btn.plain { background: transparent; color: #fff; border-color: #5d6c8d; }
+
+  .tabs { display: flex; gap: 4px; padding: 14px 18px 0; max-width: 1200px; margin: 0 auto; }
+  .tabs button { border: 0; background: transparent; padding: 9px 14px; border-radius: 9px 9px 0 0; font-weight: 600; color: var(--ink-soft); border-bottom: 3px solid transparent; }
+  .tabs button[aria-selected=true] { color: var(--ink); border-bottom-color: var(--flame); }
+
+  .page { max-width: 1200px; margin: 0 auto; padding: 16px 18px 90px; }
+  .split { display: grid; grid-template-columns: minmax(0, 440px) minmax(0, 1fr); gap: 18px; align-items: start; }
+  .map { height: 300px; border-radius: 10px; border: 1.5px solid var(--line); margin-top: 6px; background: #dfe6f0; }
+  .map.tall { height: 420px; }
+  .preview { width: 100%; max-height: 220px; object-fit: contain; background: #0b1326; border-radius: 10px; margin-top: 10px; display: block; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+  .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0 16px; }
+
+  .count { color: var(--ink-soft); margin: 0 0 12px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+  .card.off { opacity: 0.6; }
+  .card img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--mist); display: block; }
+  .card .body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+  .card b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card .coords { color: var(--ink-soft); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+  .card .toggle { display: flex; align-items: center; gap: 8px; font-weight: 500; margin: 0; }
+  .card .acts { display: flex; gap: 8px; margin-top: auto; }
+  .empty { background: var(--card); border: 1.5px dashed var(--line); border-radius: 12px; padding: 28px; color: var(--ink-soft); }
+
+  .pin { filter: drop-shadow(0 2px 2px rgba(11, 19, 38, 0.45)); }
+  #status { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 10px; max-width: calc(100% - 32px); z-index: 3000; }
+  #status.bad { background: var(--red); }
+
+  @media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div data-view="loading" class="notice"><div class="box">Loading…</div></div>
+
+<div data-view="setup" class="notice" hidden><div class="box">
+  <h2>Connect the database first</h2>
+  <p>Open <code>config.js</code> and paste in your Supabase project URL and publishable key. The README walks through it.</p>
+</div></div>
+
+<div data-view="login" class="notice" hidden>
+  <form class="box" id="loginForm">
+    <h2>Sign in to the admin panel</h2>
+    <label for="email">Email</label>
+    <input type="email" id="email" autocomplete="username" required>
+    <label for="password">Password</label>
+    <input type="password" id="password" autocomplete="current-password" required>
+    <p class="error" id="loginError" hidden></p>
+    <div class="row"><button class="btn" id="loginBtn">Sign in</button></div>
+  </form>
+</div>
+
+<div data-view="denied" class="notice" hidden><div class="box">
+  <h2>This account isn’t an admin</h2>
+  <p>You’re signed in, but this account hasn’t been added to the admins list. Run the last step in <code>setup.sql</code> with this account’s email, then sign in again.</p>
+  <div class="row"><button class="btn plain" id="deniedOut">Sign out</button></div>
+</div></div>
+
+<div data-view="app" hidden>
+  <header class="top">
+    <h1>Admin panel</h1>
+    <a href="index.html" target="_blank" rel="noopener">Open the game</a>
+    <span class="who" id="who"></span>
+    <button class="btn plain small" id="signOut">Sign out</button>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tabPhotos" aria-selected="true" aria-controls="panelPhotos">Photos</button>
+    <button role="tab" id="tabSettings" aria-selected="false" aria-controls="panelSettings">Campus and game settings</button>
+  </div>
+
+  <div class="page">
+    <div id="panelPhotos" role="tabpanel" aria-labelledby="tabPhotos" class="split">
+      <form class="box" id="photoForm">
+        <h2 id="formTitle">Add a photo</h2>
+        <div id="fileField">
+          <label for="file">Photo</label>
+          <input type="file" id="file" accept="image/*">
+          <p class="help">Any phone photo works. It’s shrunk before upload so the game loads fast.</p>
+        </div>
+        <img class="preview" id="preview" alt="Preview of the selected photo" hidden>
+
+        <label>Where was it taken?</label>
+        <p class="help" id="pinNote">Click the map to drop the pin.</p>
+        <div class="map" id="pinMap"></div>
+
+        <label for="name">Name of the spot (optional)</label>
+        <input type="text" id="name" maxlength="80" placeholder="Library steps">
+        <p class="help">Players see this after they guess.</p>
+
+        <div class="row">
+          <button class="btn" id="savePhoto">Save photo</button>
+          <button type="button" class="btn plain" id="cancelEdit" hidden>Cancel</button>
+        </div>
+      </form>
+
+      <div>
+        <p class="count" id="count"></p>
+        <div class="cards" id="cards"></div>
+        <div class="empty" id="noPhotos" hidden>No photos yet. Add your first one with the form.</div>
+      </div>
+    </div>
+
+    <form id="panelSettings" role="tabpanel" aria-labelledby="tabSettings" class="box" hidden>
+      <h2>Game settings</h2>
+      <div class="fields">
+        <div>
+          <label for="gameTitle">Game name</label>
+          <input type="text" id="gameTitle" maxlength="40" required>
+        </div>
+        <div>
+          <label for="rounds">Photos per game</label>
+          <input type="number" id="rounds" min="1" max="20" step="1" required>
+        </div>
+        <div>
+          <label for="flashSec">Flash time (seconds)</label>
+          <input type="number" id="flashSec" min="0.1" max="10" step="0.1" required>
+        </div>
+        <div>
+          <label for="mapStyle">Map players see</label>
+          <select id="mapStyle">
+            <option value="street">Street map</option>
+            <option value="satellite">Satellite</option>
+          </select>
+        </div>
+      </div>
+
+      <h2 style="margin-top:26px">Campus area</h2>
+      <p class="help" style="margin:0">Move and zoom the map until the campus fills the frame, then press the button. Players can’t scroll or zoom outside this area.</p>
+      <div class="map tall" id="areaMap"></div>
+      <div class="row" style="margin-top:12px;align-items:center">
+        <button type="button" class="btn plain" id="useView">Use this view as the campus area</button>
+        <span class="help" id="areaNote" style="margin:0"></span>
+      </div>
+
+      <div class="row"><button class="btn" id="saveSettings">Save settings</button></div>
+    </form>
+  </div>
+</div>
+
+<div id="status" role="status" hidden></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/lite.umd.js"></script>
+<script src="config.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var FALLBACK_CENTER = [18.52, 73.73];
+  var MAX_SIDE = 1600;      // longest side of an uploaded photo, in pixels
+  var cfg = window.CAMPUS_CONFIG || {};
+  var $ = function (id) { return document.getElementById(id); };
+
+  var sb = null;
+  var settings = { game_title: 'FLAME Guessr', rounds: 5, flash_ms: 1000, map_style: 'street' };
+  var rows = [];
+  var editing = null;       // the row being edited, or null when adding
+  var newPhoto = null;      // shrunk JPEG waiting to be uploaded
+  var pinMap = null, pin = null, pinOutline = null;
+  var areaMap = null, areaRect = null, area = null;
+  var statusTimer = null;
+
+  function show(name) {
+    document.querySelectorAll('[data-view]').forEach(function (el) { el.hidden = el.dataset.view !== name; });
+  }
+  function say(message, bad) {
+    var el = $('status');
+    el.textContent = message;
+    el.classList.toggle('bad', !!bad);
+    el.hidden = false;
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(function () { el.hidden = true; }, bad ? 7000 : 3000);
+  }
+  function photoUrl(path) { return sb.storage.from('photos').getPublicUrl(path).data.publicUrl; }
+  function campusBounds() {
+    if (area) return L.latLngBounds([area.south, area.west], [area.north, area.east]);
+    return null;
+  }
+
+  // ---------- Sign in ----------
+
+  async function boot() {
+    var ready = /^https:\/\/.+/.test(cfg.supabaseUrl || '') && cfg.supabaseKey && !/^PASTE/.test(cfg.supabaseKey);
+    if (!ready) { show('setup'); return; }
+    if (!window.L || !window.supabase) {
+      show('login');
+      loginError('The map or database library didn’t load. Check your internet connection and reload.');
+      return;
+    }
+    sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey);
+    var res = await sb.auth.getSession();
+    if (res.data && res.data.session) enter(res.data.session); else show('login');
+  }
+  function loginError(message) {
+    $('loginError').textContent = message;
+    $('loginError').hidden = !message;
+  }
+
+  $('loginForm').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    if (!sb) return;
+    loginError('');
+    $('loginBtn').disabled = true;
+    var res = await sb.auth.signInWithPassword({ email: $('email').value.trim(), password: $('password').value });
+    $('loginBtn').disabled = false;
+    if (res.error) { loginError('Sign-in failed: ' + res.error.message); return; }
+    $('password').value = '';
+    enter(res.data.session);
+  });
+
+  async function signOut() {
+    await sb.auth.signOut();
+    show('login');
+  }
+  $('signOut').addEventListener('click', signOut);
+  $('deniedOut').addEventListener('click', signOut);
+
+  async function enter(session) {
+    show('loading');
+    var check = await sb.rpc('is_admin');
+    if (check.error) {
+      show('login');
+      loginError('Couldn’t check your account: ' + check.error.message + '. Has setup.sql been run?');
+      return;
+    }
+    if (!check.data) { show('denied'); return; }
+
+    $('who').textContent = session.user.email;
+    var s = await sb.from('settings').select('*').eq('id', 1).maybeSingle();
+    if (s.data) Object.assign(settings, s.data);
+    if (settings.south != null && settings.north != null) {
+      area = { south: settings.south, west: settings.west, north: settings.north, east: settings.east };
+    }
+    show('app');
+    fillSettings();
+    initPinMap();
+    await loadPhotos();
+    if (!area) say('Start by setting the campus area in the second tab.');
+  }
+
+  // ---------- Maps ----------
+
+  // OpenStreetMap's servers refuse pages opened straight from a file (no Referer is sent),
+  // so in that one case fall back to Esri's street map. On a real web address OSM is used.
+  function streetLayer(maxZoom) {
+    if (location.protocol === 'file:') {
+      return L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+        maxNativeZoom: 18, maxZoom: maxZoom,
+        attribution: 'Map &copy; Esri and its data providers'
+      });
+    }
+    return L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxNativeZoom: 19, maxZoom: maxZoom,
+      referrerPolicy: 'strict-origin-when-cross-origin',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    });
+  }
+
+  function makeMap(id) {
+    var street = streetLayer(21);
+    var satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxNativeZoom: 18, maxZoom: 21,
+      attribution: 'Imagery &copy; Esri, Maxar, Earthstar Geographics'
+    });
+    var m = L.map(id, { layers: [satellite], zoomSnap: 0.25 });
+    L.control.layers({ 'Satellite': satellite, 'Street map': street }, null, { collapsed: false }).addTo(m);
+    var b = campusBounds();
+    if (b) m.fitBounds(b); else m.setView(FALLBACK_CENTER, 15);
+    return m;
+  }
+  function pinIcon() {
+    return L.divIcon({
+      className: 'pin', iconSize: [30, 40], iconAnchor: [15, 39],
+      html: '<svg viewBox="0 0 30 40" width="30" height="40"><path d="M15 1C7.300 1 1 7.200 1 14.800 1 24.800 15 39 15 39s14-14.200 14-24.200C29 7.200 22.700 1 15 1z" fill="#f26a1b" stroke="#fff" stroke-width="1.500"/><circle cx="15" cy="14.500" r="5.500" fill="#fff"/></svg>'
+    });
+  }
+
+  function initPinMap() {
+    if (pinMap) return;
+    pinMap = makeMap('pinMap');
+    pinMap.on('click', function (e) {
+      setPin(e.latlng.lat, e.latlng.lng, false);
+      $('pinNote').textContent = 'Pin placed. Drag it to fine-tune.';
+    });
+    drawOutline();
+  }
+  function drawOutline() {
+    if (!pinMap) return;
+    if (pinOutline) { pinOutline.remove(); pinOutline = null; }
+    var b = campusBounds();
+    if (b) pinOutline = L.rectangle(b, { color: '#ffc233', weight: 2, fill: false, interactive: false }).addTo(pinMap);
+  }
+  function setPin(lat, lng, moveMap) {
+    if (!pin) pin = L.marker([lat, lng], { icon: pinIcon(), draggable: true }).addTo(pinMap);
+    else pin.setLatLng([lat, lng]);
+    if (moveMap) pinMap.setView([lat, lng], Math.max(pinMap.getZoom(), 18));
+  }
+  function clearPin() {
+    if (pin) { pin.remove(); pin = null; }
+  }
+
+  function initAreaMap() {
+    if (areaMap) { areaMap.invalidateSize(); return; }
+    areaMap = makeMap('areaMap');
+    drawArea();
+  }
+  function drawArea() {
+    if (areaRect) { areaRect.remove(); areaRect = null; }
+    var b = campusBounds();
+    if (b) areaRect = L.rectangle(b, { color: '#f26a1b', weight: 3, fillOpacity: 0.08, interactive: false }).addTo(areaMap);
+    $('areaNote').textContent = b ? 'The orange box is the campus area.' : 'No campus area set yet.';
+  }
+  $('useView').addEventListener('click', function () {
+    var b = areaMap.getBounds();
+    area = { south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() };
+    drawArea();
+    $('areaNote').textContent = 'Area updated. Press “Save settings” to keep it.';
+  });
+
+  // ---------- Tabs ----------
+
+  function selectTab(which) {
+    var photos = which === 'photos';
+    $('tabPhotos').setAttribute('aria-selected', String(photos));
+    $('tabSettings').setAttribute('aria-selected', String(!photos));
+    $('panelPhotos').hidden = !photos;
+    $('panelSettings').hidden = photos;
+    if (photos) { pinMap.invalidateSize(); drawOutline(); } else { initAreaMap(); }
+  }
+  $('tabPhotos').addEventListener('click', function () { selectTab('photos'); });
+  $('tabSettings').addEventListener('click', function () { selectTab('settings'); });
+
+  // ---------- Photo list ----------
+
+  async function loadPhotos() {
+    var res = await sb.from('locations').select('*').order('created_at', { ascending: false });
+    if (res.error) { say('Couldn’t load the photos: ' + res.error.message, true); return; }
+    rows = res.data || [];
+    renderList();
+  }
+
+  function renderList() {
+    var cards = $('cards');
+    cards.textContent = '';
+    var live = rows.filter(function (r) { return r.active; }).length;
+    $('count').textContent = rows.length
+      ? rows.length + (rows.length === 1 ? ' photo, ' : ' photos, ') + live + ' in the game'
+      : '';
+    $('noPhotos').hidden = rows.length > 0;
+
+    rows.forEach(function (row) {
+      var card = document.createElement('div');
+      card.className = 'card' + (row.active ? '' : ' off');
+
+      var img = document.createElement('img');
+      img.loading = 'lazy'; img.alt = ''; img.src = photoUrl(row.image_path);
+
+      var body = document.createElement('div');
+      body.className = 'body';
+      var title = document.createElement('b');
+      title.textContent = row.name || 'Unnamed spot';
+      var coords = document.createElement('span');
+      coords.className = 'coords';
+      coords.textContent = row.lat.toFixed(5) + ', ' + row.lng.toFixed(5);
+
+      var toggle = document.createElement('label');
+      toggle.className = 'toggle';
+      var box = document.createElement('input');
+      box.type = 'checkbox'; box.checked = row.active;
+      box.addEventListener('change', function () { setActive(row, box.checked); });
+      toggle.append(box, 'In the game');
+
+      var acts = document.createElement('div');
+      acts.className = 'acts';
+      var edit = document.createElement('button');
+      edit.type = 'button'; edit.className = 'btn plain small'; edit.textContent = 'Edit';
+      edit.addEventListener('click', function () { startEdit(row); });
+      var del = document.createElement('button');
+      del.type = 'button'; del.className = 'btn danger small'; del.textContent = 'Delete';
+      del.addEventListener('click', function () { removePhoto(row); });
+      acts.append(edit, del);
+
+      body.append(title, coords, toggle, acts);
+      card.append(img, body);
+      cards.append(card);
+    });
+  }
+
+  async function setActive(row, on) {
+    var res = await sb.from('locations').update({ active: on }).eq('id', row.id);
+    if (res.error) { say('Couldn’t update the photo: ' + res.error.message, true); }
+    else { row.active = on; say(on ? 'Photo is in the game.' : 'Photo is hidden from the game.'); }
+    renderList();
+  }
+
+  async function removePhoto(row) {
+    if (!confirm('Delete "' + (row.name || 'Unnamed spot') + '"? This can’t be undone.')) return;
+    var res = await sb.from('locations').delete().eq('id', row.id);
+    if (res.error) { say('Couldn’t delete the photo: ' + res.error.message, true); return; }
+    await sb.storage.from('photos').remove([row.image_path]);
+    if (editing && editing.id === row.id) resetForm();
+    rows = rows.filter(function (r) { return r.id !== row.id; });
+    renderList();
+    say('Photo deleted.');
+  }
+
+  // ---------- Add / edit form ----------
+
+  function resetForm() {
+    editing = null;
+    newPhoto = null;
+    $('photoForm').reset();
+    $('formTitle').textContent = 'Add a photo';
+    $('savePhoto').textContent = 'Save photo';
+    $('cancelEdit').hidden = true;
+    $('fileField').hidden = false;
+    $('preview').hidden = true;
+    $('pinNote').textContent = 'Click the map to drop the pin.';
+    clearPin();
+  }
+
+  function startEdit(row) {
+    editing = row;
+    newPhoto = null;
+    $('formTitle').textContent = 'Edit photo';
+    $('savePhoto').textContent = 'Save changes';
+    $('cancelEdit').hidden = false;
+    $('fileField').hidden = true;       // to swap the picture itself, delete and add again
+    $('preview').src = photoUrl(row.image_path);
+    $('preview').hidden = false;
+    $('name').value = row.name || '';
+    $('pinNote').textContent = 'Drag the pin, or click the map, to move it.';
+    setPin(row.lat, row.lng, true);
+    $('photoForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  $('cancelEdit').addEventListener('click', resetForm);
+
+  function loadImageElement(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('unreadable image')); };
+      img.src = url;
+    });
+  }
+  async function shrink(file) {
+    var source;
+    try { source = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+    catch (e) { source = await loadImageElement(file); }
+    var w = source.width || source.naturalWidth, h = source.height || source.naturalHeight;
+    var k = Math.min(1, MAX_SIDE / Math.max(w, h));
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.round(w * k);
+    canvas.height = Math.round(h * k);
+    canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
+    return new Promise(function (resolve, reject) {
+      canvas.toBlob(function (blob) { blob ? resolve(blob) : reject(new Error('could not convert')); }, 'image/jpeg', 0.85);
+    });
+  }
+
+  $('file').addEventListener('change', async function () {
+    var file = $('file').files[0];
+    newPhoto = null;
+    if (!file) { $('preview').hidden = true; return; }
+
+    var gps = null;
+    try { if (window.exifr) gps = await window.exifr.gps(file); } catch (e) { gps = null; }
+
+    try {
+      newPhoto = await shrink(file);
+    } catch (e) {
+      $('preview').hidden = true;
+      $('file').value = '';
+      say('This file couldn’t be read as a photo. Try a JPG or PNG.', true);
+      return;
+    }
+    $('preview').src = URL.createObjectURL(newPhoto);
+    $('preview').hidden = false;
+
+    if (gps && isFinite(gps.latitude) && isFinite(gps.longitude)) {
+      setPin(gps.latitude, gps.longitude, true);
+      $('pinNote').textContent = 'Pin placed from the photo’s GPS data. Drag it if it’s a little off.';
+    } else if (!pin) {
+      $('pinNote').textContent = 'This photo has no GPS data. Click the map where it was taken.';
+    }
+  });
+
+  $('photoForm').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    if (!editing && !newPhoto) { say('Choose a photo first.', true); return; }
+    if (!pin) { say('Click the map to mark where the photo was taken.', true); return; }
+
+    var at = pin.getLatLng();
+    var fields = { name: $('name').value.trim() || null, lat: at.lat, lng: at.lng };
+    $('savePhoto').disabled = true;
+
+    try {
+      if (editing) {
+        var up = await sb.from('locations').update(fields).eq('id', editing.id);
+        if (up.error) throw up.error;
+        say('Changes saved.');
+      } else {
+        var id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2);
+        var path = id + '.jpg';
+        var stored = await sb.storage.from('photos').upload(path, newPhoto, { contentType: 'image/jpeg', cacheControl: '31536000' });
+        if (stored.error) throw stored.error;
+        fields.image_path = path;
+        var ins = await sb.from('locations').insert(fields);
+        if (ins.error) {
+          await sb.storage.from('photos').remove([path]);   // don't leave an orphan file behind
+          throw ins.error;
+        }
+        say('Photo saved. It’s in the game now.');
+      }
+      resetForm();
+      await loadPhotos();
+    } catch (err) {
+      say('Couldn’t save: ' + (err.message || err), true);
+    } finally {
+      $('savePhoto').disabled = false;
+    }
+  });
+
+  // ---------- Settings ----------
+
+  function fillSettings() {
+    $('gameTitle').value = settings.game_title;
+    $('rounds').value = settings.rounds;
+    $('flashSec').value = settings.flash_ms / 1000;
+    $('mapStyle').value = settings.map_style;
+  }
+
+  $('panelSettings').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var next = {
+      id: 1,
+      game_title: $('gameTitle').value.trim(),
+      rounds: Math.round(Number($('rounds').value)),
+      flash_ms: Math.round(Number($('flashSec').value) * 1000),
+      map_style: $('mapStyle').value,
+      south: area ? area.south : null,
+      west: area ? area.west : null,
+      north: area ? area.north : null,
+      east: area ? area.east : null,
+      updated_at: new Date().toISOString()
+    };
+    $('saveSettings').disabled = true;
+    var res = await sb.from('settings').upsert(next);
+    $('saveSettings').disabled = false;
+    if (res.error) { say('Couldn’t save the settings: ' + res.error.message, true); return; }
+    Object.assign(settings, next);
+    if (area) $('areaNote').textContent = 'The orange box is the campus area.';
+    say('Settings saved.');
+  });
+
+  boot();
+})();
+</script>
+</body>
+</html>

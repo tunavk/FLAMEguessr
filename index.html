@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Campus guessing game</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root {
+    --ink: #14213d;
+    --ink-soft: #33415f;
+    --mist: #eef2f7;
+    --card: #ffffff;
+    --line: #d3dbe8;
+    --flame: #f26a1b;
+    --flame-dark: #c9510c;
+    --marigold: #ffc233;
+    --green: #17885c;
+    --display: "Bricolage Grotesque", "Trebuchet MS", system-ui, sans-serif;
+    --body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body { font-family: var(--body); color: var(--ink); background: var(--mist); font-size: 16px; line-height: 1.5; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  :focus-visible { outline: 3px solid var(--marigold); outline-offset: 2px; }
+  h1, h2 { font-family: var(--display); font-weight: 800; line-height: 1.05; margin: 0; letter-spacing: -0.01em; }
+
+  .btn { border: 0; border-radius: 10px; padding: 12px 20px; font-weight: 600; background: var(--flame); color: #fff; }
+  .btn:hover:not(:disabled) { background: var(--flame-dark); }
+  .btn:disabled { background: #b9c2d2; color: #fff; }
+  .btn.quiet { background: transparent; color: inherit; border: 1.5px solid currentColor; }
+  .btn.quiet:hover:not(:disabled) { background: rgba(127, 140, 170, 0.18); }
+
+  /* Message screens (loading, setup, errors) */
+  .notice { min-height: 100%; display: grid; place-items: center; padding: 24px; }
+  .notice > div { max-width: 520px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 28px; }
+  .notice h2 { font-size: 1.6rem; margin-bottom: 10px; }
+  .notice p { margin: 0 0 10px; }
+  .notice code { background: var(--mist); padding: 1px 6px; border-radius: 5px; }
+
+  /* Home */
+  .home { min-height: 100%; background: var(--ink); color: #fff; display: flex; flex-direction: column; padding: clamp(20px, 5vw, 56px); }
+  .home-main { flex: 1; display: flex; flex-direction: column; justify-content: center; max-width: 980px; width: 100%; margin: 0 auto; }
+  .mark { width: 54px; height: 72px; margin-bottom: 18px; }
+  .home h1 { font-size: clamp(2.6rem, 9vw, 5.5rem); }
+  .lede { font-size: clamp(1.05rem, 2.2vw, 1.3rem); color: #c9d3e6; max-width: 34ch; margin: 16px 0 34px; }
+  .modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .mode { text-align: left; border: 0; border-radius: 16px; padding: 22px 24px 20px; background: #fff; color: var(--ink); display: flex; flex-direction: column; gap: 6px; }
+  .mode b { font-family: var(--display); font-size: 1.9rem; font-weight: 800; line-height: 1.1; }
+  .mode span { color: var(--ink-soft); }
+  .mode small { margin-top: 10px; font-weight: 600; color: var(--ink); }
+  .mode.flash { background: var(--marigold); }
+  .mode.flash span { color: #4d3a05; }
+  .mode:hover { transform: translateY(-2px); }
+  .mode { transition: transform 0.12s ease; }
+  .home-foot { max-width: 980px; width: 100%; margin: 28px auto 0; color: #93a1bd; font-size: 0.9rem; }
+  .home-foot a { color: inherit; }
+
+  /* Game */
+  .game { height: 100%; display: flex; flex-direction: column; }
+  .bar { flex: none; background: var(--ink); color: #fff; display: flex; align-items: center; gap: 18px; padding: 10px 16px; min-height: 54px; }
+  .bar .name { font-family: var(--display); font-weight: 800; font-size: 1.1rem; margin-right: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar .stat { white-space: nowrap; color: #c9d3e6; }
+  .bar .stat b { color: #fff; font-variant-numeric: tabular-nums; }
+  .chip { background: var(--marigold); color: var(--ink); font-weight: 600; font-size: 0.82rem; border-radius: 999px; padding: 2px 10px; }
+  .bar .btn.quiet { padding: 6px 12px; font-size: 0.9rem; border-color: #5d6c8d; }
+
+  .play { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
+  .photo { position: relative; background: #0b1326; overflow: hidden; display: grid; place-items: center; min-height: 0; }
+  .photo img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .photo.is-full { position: fixed; inset: 0; z-index: 2000; }
+  .photo .enlarge { position: absolute; right: 12px; bottom: 12px; background: rgba(11, 19, 38, 0.78); color: #fff; border: 0; border-radius: 8px; padding: 7px 12px; font-size: 0.88rem; font-weight: 600; }
+  .stage-card { color: #fff; text-align: center; padding: 24px; max-width: 30ch; }
+  .stage-card h2 { font-size: clamp(1.6rem, 4vw, 2.4rem); margin-bottom: 10px; }
+  .stage-card p { color: #c9d3e6; margin: 0 0 18px; }
+  .photo::after { content: ""; position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+  .photo.is-flash::after { animation: flash 0.28s ease-out; }
+  @keyframes flash { from { opacity: 0.95; } to { opacity: 0; } }
+
+  .side { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; background: var(--card); border-left: 1px solid var(--line); }
+  #map { min-height: 0; background: #dfe6f0; }
+  .action { padding: 12px 14px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 14px; min-height: 72px; }
+  .action .hint { color: var(--ink-soft); margin-right: auto; }
+  .result { margin-right: auto; min-width: 0; }
+  .result .points { font-family: var(--display); font-weight: 800; font-size: 1.7rem; line-height: 1; font-variant-numeric: tabular-nums; }
+  .result .detail { color: var(--ink-soft); font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; }
+
+  .pin { filter: drop-shadow(0 2px 2px rgba(11, 19, 38, 0.45)); }
+
+  /* Final */
+  .final { min-height: 100%; padding: clamp(20px, 5vw, 56px); display: grid; place-items: start center; }
+  .final-inner { width: 100%; max-width: 680px; }
+  .final .total { font-family: var(--display); font-weight: 800; font-size: clamp(3.2rem, 13vw, 6rem); line-height: 1; font-variant-numeric: tabular-nums; }
+  .final .of { color: var(--ink-soft); margin: 6px 0 4px; }
+  .final .best { font-weight: 600; margin: 0 0 22px; }
+  .rounds { list-style: none; margin: 0 0 24px; padding: 0; background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .rounds li { display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-top: 1px solid var(--line); }
+  .rounds li:first-child { border-top: 0; }
+  .rounds img { width: 72px; height: 54px; object-fit: cover; border-radius: 8px; flex: none; background: var(--mist); }
+  .rounds .where { flex: 1; min-width: 0; }
+  .rounds .where b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rounds .where span { color: var(--ink-soft); font-size: 0.92rem; }
+  .rounds .pts { font-family: var(--display); font-weight: 800; font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+  .final-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+
+  @media (max-width: 820px) {
+    .play { grid-template-columns: 1fr; grid-template-rows: 42% 58%; }
+    .side { border-left: 0; border-top: 1px solid var(--line); }
+    .bar { gap: 12px; }
+    .bar .name { display: none; }
+    .bar .stat:first-of-type { margin-right: auto; }
+    .action { min-height: 64px; padding: 10px 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .photo.is-flash::after { animation: none; }
+    .mode { transition: none; }
+    .mode:hover { transform: none; }
+  }
+</style>
+</head>
+<body>
+
+<div data-screen="loading" class="notice"><div><p style="margin:0">Loading the game…</p></div></div>
+
+<div data-screen="setup" class="notice" hidden><div>
+  <h2>One step left: connect the database</h2>
+  <p>Open <code>config.js</code> and paste in your Supabase project URL and publishable key. The README walks through it.</p>
+</div></div>
+
+<div data-screen="error" class="notice" hidden><div>
+  <h2>The game couldn’t start</h2>
+  <p id="errorText"></p>
+  <button class="btn" onclick="location.reload()">Try again</button>
+</div></div>
+
+<div data-screen="empty" class="notice" hidden><div>
+  <h2>No photos yet</h2>
+  <p>The game needs at least one photo. Add some in the admin panel and they’ll show up here straight away.</p>
+  <a class="btn" style="display:inline-block;text-decoration:none" href="admin.html">Open the admin panel</a>
+</div></div>
+
+<div data-screen="home" class="home" hidden>
+  <div class="home-main">
+    <svg class="mark" viewBox="0 0 54 72" aria-hidden="true">
+      <path d="M27 2C13.2 2 2 13 2 26.6 2 44.5 27 70 27 70s25-25.500 25-43.400C52 13 40.800 2 27 2z" fill="#f26a1b"/>
+      <circle cx="27" cy="26" r="10" fill="#ffc233"/>
+    </svg>
+    <h1 id="homeTitle">Campus guessing game</h1>
+    <p class="lede" id="homeLede"></p>
+    <div class="modes">
+      <button class="mode" data-mode="normal">
+        <b>Normal</b>
+        <span>Study each photo for as long as you like, then drop your pin.</span>
+        <small id="bestNormal"></small>
+      </button>
+      <button class="mode flash" data-mode="flash">
+        <b>Flash</b>
+        <span id="flashDesc"></span>
+        <small id="bestFlash"></small>
+      </button>
+    </div>
+  </div>
+  <div class="home-foot"><a href="admin.html">Admin</a></div>
+</div>
+
+<div data-screen="game" class="game" hidden>
+  <header class="bar">
+    <span class="name" id="barTitle"></span>
+    <span class="stat">Photo <b id="roundNow">1</b> of <b id="roundMax">5</b></span>
+    <span class="stat">Score <b id="scoreNow">0</b></span>
+    <span class="chip" id="modeChip" hidden>Flash</span>
+    <button class="btn quiet" id="quitBtn">Quit</button>
+  </header>
+  <main class="play">
+    <section class="photo" id="photo">
+      <img id="photoImg" alt="A photo taken somewhere on campus" hidden>
+      <div class="stage-card" id="stageCard" hidden>
+        <h2 id="stageTitle"></h2>
+        <p id="stageText"></p>
+        <button class="btn" id="stageBtn"></button>
+      </div>
+      <button class="enlarge" id="enlargeBtn" hidden>Enlarge photo</button>
+    </section>
+    <section class="side">
+      <div id="map" aria-label="Campus map. Click to place your guess."></div>
+      <div class="action">
+        <span class="hint" id="hint">Click the map to place your pin.</span>
+        <div class="result" id="result" hidden>
+          <div class="points" id="resultPoints"></div>
+          <div class="detail" id="resultDetail"></div>
+        </div>
+        <button class="btn" id="guessBtn" disabled>Guess</button>
+        <button class="btn" id="nextBtn" hidden>Next photo</button>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div data-screen="final" class="final" hidden>
+  <div class="final-inner">
+    <h2 id="finalHeading" style="font-size:1.4rem;margin-bottom:14px"></h2>
+    <div class="total" id="finalTotal">0</div>
+    <p class="of" id="finalOf"></p>
+    <p class="best" id="finalBest"></p>
+    <ol class="rounds" id="finalRounds"></ol>
+    <div class="final-actions">
+      <button class="btn" id="againBtn">Play again</button>
+      <button class="btn quiet" id="homeBtn">Change mode</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var MAX_POINTS = 5000;
+  var FALLBACK_CENTER = [18.52, 73.73];
+  var cfg = window.CAMPUS_CONFIG || {};
+  var $ = function (id) { return document.getElementById(id); };
+
+  var sb = null;
+  var settings = { game_title: 'Campus guessing game', rounds: 5, flash_ms: 1000, map_style: 'street' };
+  var locations = [];
+  var campus = null;      // L.LatLngBounds of the campus, or null
+  var map = null, tiles = null, overlay = null;
+  var game = null;
+
+  function show(name) {
+    document.querySelectorAll('[data-screen]').forEach(function (el) {
+      el.hidden = el.dataset.screen !== name;
+    });
+  }
+  function fail(message) { $('errorText').textContent = message; show('error'); }
+  function fmt(n) { return Math.round(n).toLocaleString('en-IN'); }
+  function fmtDist(m) { return m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(2) + ' km'; }
+  function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function nextPaint() {
+    return new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(r); }); });
+  }
+  function shuffle(list) {
+    var a = list.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+  function flashSeconds() {
+    var s = settings.flash_ms / 1000;
+    return (Number.isInteger(s) ? s : s.toFixed(1)) + (s === 1 ? ' second' : ' seconds');
+  }
+  function getBest(mode) {
+    try { return Number(localStorage.getItem('campus_best_' + mode)) || 0; } catch (e) { return 0; }
+  }
+  function setBest(mode, value) {
+    try { localStorage.setItem('campus_best_' + mode, String(value)); } catch (e) { /* private mode */ }
+  }
+
+  // ---------- Start-up ----------
+
+  async function boot() {
+    var ready = /^https:\/\/.+/.test(cfg.supabaseUrl || '') && cfg.supabaseKey && !/^PASTE/.test(cfg.supabaseKey);
+    if (!ready) { show('setup'); return; }
+    if (!window.L || !window.supabase) {
+      fail('The map or database library didn’t load. Check your internet connection and reload.');
+      return;
+    }
+    sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey);
+
+    var res;
+    try {
+      res = await Promise.all([
+        sb.from('settings').select('*').eq('id', 1).maybeSingle(),
+        sb.from('locations').select('id,name,image_path,lat,lng').eq('active', true)
+      ]);
+    } catch (e) {
+      fail('Couldn’t reach the database. Check your connection and the values in config.js.');
+      return;
+    }
+    if (res[0].error || res[1].error) {
+      fail('The database answered with an error: ' + (res[0].error || res[1].error).message +
+        '. Check that setup.sql has been run and config.js has the right values.');
+      return;
+    }
+    if (res[0].data) Object.assign(settings, res[0].data);
+    locations = (res[1].data || []).map(function (row) {
+      row.url = sb.storage.from('photos').getPublicUrl(row.image_path).data.publicUrl;
+      return row;
+    });
+
+    if (settings.south != null && settings.north != null && settings.west != null && settings.east != null) {
+      campus = L.latLngBounds([settings.south, settings.west], [settings.north, settings.east]);
+    } else if (locations.length) {
+      campus = L.latLngBounds(locations.map(function (l) { return [l.lat, l.lng]; })).pad(0.3);
+    }
+
+    document.title = settings.game_title;
+    $('homeTitle').textContent = settings.game_title;
+    $('barTitle').textContent = settings.game_title;
+    if (!locations.length) { show('empty'); return; }
+    showHome();
+  }
+
+  function showHome() {
+    var n = Math.min(settings.rounds, locations.length);
+    $('homeLede').textContent = n + (n === 1 ? ' photo' : ' photos') +
+      ' from around campus. Drop a pin where each one was taken. The closer you are, the more you score.';
+    $('flashDesc').textContent = 'Each photo shows for ' + flashSeconds() + '. Then it’s gone and you guess from memory.';
+    $('bestNormal').textContent = getBest('normal') ? 'Your best: ' + fmt(getBest('normal')) : '';
+    $('bestFlash').textContent = getBest('flash') ? 'Your best: ' + fmt(getBest('flash')) : '';
+    show('home');
+  }
+
+  // ---------- Map ----------
+
+  function pinIcon(color, inner) {
+    return L.divIcon({
+      className: 'pin',
+      iconSize: [30, 40],
+      iconAnchor: [15, 39],
+      html: '<svg viewBox="0 0 30 40" width="30" height="40"><path d="M15 1C7.300 1 1 7.200 1 14.800 1 24.800 15 39 15 39s14-14.200 14-24.200C29 7.200 22.700 1 15 1z" fill="' +
+        color + '" stroke="#fff" stroke-width="1.500"/><circle cx="15" cy="14.500" r="5.500" fill="' + inner + '"/></svg>'
+    });
+  }
+
+  function viewBounds() {
+    if (campus) return campus.pad(0.08);
+    return L.latLng(FALLBACK_CENTER).toBounds(1500);
+  }
+
+  // OpenStreetMap's servers refuse pages opened straight from a file (no Referer is sent),
+  // so in that one case fall back to Esri's street map. On a real web address OSM is used.
+  function streetLayer(maxZoom) {
+    if (location.protocol === 'file:') {
+      return L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+        maxNativeZoom: 18, maxZoom: maxZoom,
+        attribution: 'Map &copy; Esri and its data providers'
+      });
+    }
+    return L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxNativeZoom: 19, maxZoom: maxZoom,
+      referrerPolicy: 'strict-origin-when-cross-origin',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    });
+  }
+
+  function initMap() {
+    map = L.map('map', { maxBoundsViscosity: 1, zoomSnap: 0.25, attributionControl: true });
+    if (settings.map_style === 'satellite') {
+      tiles = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        maxNativeZoom: 18, maxZoom: 20,
+        attribution: 'Imagery &copy; Esri, Maxar, Earthstar Geographics'
+      });
+    } else {
+      tiles = streetLayer(20);
+    }
+    tiles.addTo(map);
+
+    if (campus) {
+      // Grey out everything that isn't campus, so the map reads as "just our campus".
+      var world = [[-85, -179.9], [-85, 179.9], [85, 179.9], [85, -179.9]];
+      var hole = [campus.getSouthWest(), campus.getNorthWest(), campus.getNorthEast(), campus.getSouthEast()];
+      L.polygon([world, hole], { stroke: false, fillColor: '#14213d', fillOpacity: 0.62, interactive: false }).addTo(map);
+      L.rectangle(campus, { color: '#f26a1b', weight: 2, fill: false, interactive: false }).addTo(map);
+    }
+    overlay = L.layerGroup().addTo(map);
+    map.on('click', onMapClick);
+    window.addEventListener('resize', function () { if (game && game.phase !== 'result' && game.phase !== 'done') lockMap(false); });
+  }
+
+  // Keep the map on campus: no panning away, no zooming out past it.
+  function lockMap(recentre) {
+    map.invalidateSize();
+    var b = viewBounds();
+    map.setMinZoom(0);
+    map.setMaxBounds(null);
+    var z = map.getBoundsZoom(b);
+    if (recentre) map.fitBounds(b, { animate: false });
+    map.setMinZoom(z);
+    map.setMaxBounds(b);
+  }
+
+  function onMapClick(e) {
+    if (!game || game.phase !== 'guess') return;
+    if (!game.guessMarker) {
+      game.guessMarker = L.marker(e.latlng, { icon: pinIcon('#f26a1b', '#fff'), draggable: true, keyboard: false }).addTo(overlay);
+    } else {
+      game.guessMarker.setLatLng(e.latlng);
+    }
+    $('guessBtn').disabled = false;
+    $('hint').textContent = 'Drag the pin to adjust, then guess.';
+  }
+
+  // ---------- Game ----------
+
+  function scoreFor(distance) {
+    var b = viewBounds();
+    var diagonal = b.getSouthWest().distanceTo(b.getNorthEast());
+    var scale = Math.max(diagonal * 0.18, 40);   // bigger campus = more forgiving
+    if (distance <= 8) return MAX_POINTS;        // within a few steps counts as perfect
+    return Math.round(MAX_POINTS * Math.exp(-(distance - 8) / scale));
+  }
+
+  function startGame(mode) {
+    var picks = shuffle(locations).slice(0, Math.min(settings.rounds, locations.length));
+    game = {
+      mode: mode, idx: 0, total: 0, phase: 'idle', guessMarker: null, results: [],
+      rounds: picks.map(function (loc) {
+        var img = new Image();
+        var loaded = new Promise(function (resolve) {
+          img.onload = function () { resolve(true); };
+          img.onerror = function () { resolve(false); };
+        });
+        img.src = loc.url;   // start downloading every photo now, so Flash isn't slowed by the network
+        return { loc: loc, loaded: loaded };
+      })
+    };
+    $('roundMax').textContent = game.rounds.length;
+    $('modeChip').hidden = mode !== 'flash';
+    show('game');
+    if (!map) initMap();
+    startRound();
+  }
+
+  function setStage(title, text, button, onClick) {
+    $('stageTitle').textContent = title;
+    $('stageText').textContent = text;
+    $('stageBtn').hidden = !button;
+    if (button) {
+      $('stageBtn').textContent = button;
+      $('stageBtn').disabled = false;
+      $('stageBtn').onclick = onClick;
+    }
+    $('stageCard').hidden = false;
+    $('photoImg').hidden = true;
+    $('enlargeBtn').hidden = true;
+  }
+  function showPhoto(round) {
+    $('photoImg').src = round.loc.url;
+    $('photoImg').hidden = false;
+    $('stageCard').hidden = true;
+  }
+  function photoFailed(round) {
+    setStage('This photo didn’t load', 'It won’t count against your score.', 'Skip this photo', function () {
+      game.results.push({ loc: round.loc, skipped: true });
+      advance();
+    });
+    game.phase = 'idle';
+    $('guessBtn').disabled = true;
+  }
+
+  async function startRound() {
+    var round = game.rounds[game.idx];
+    var token = game.idx;
+    game.phase = 'idle';
+    game.guessMarker = null;
+    overlay.clearLayers();
+    lockMap(true);
+    setFull(false);
+
+    $('roundNow').textContent = game.idx + 1;
+    $('scoreNow').textContent = fmt(game.total);
+    $('result').hidden = true;
+    $('nextBtn').hidden = true;
+    $('guessBtn').hidden = false;
+    $('guessBtn').disabled = true;
+    $('hint').hidden = false;
+
+    if (game.mode === 'flash') {
+      $('hint').textContent = 'Watch the photo first.';
+      setStage('Ready?', 'The photo shows for ' + flashSeconds() + '. Look for anything you recognise.', 'Show the photo', function () {
+        runFlash(round, token);
+      });
+      return;
+    }
+
+    $('hint').textContent = 'Click the map to place your pin.';
+    setStage('Loading photo…', '', null);
+    var ok = await round.loaded;
+    if (!game || game.idx !== token) return;
+    if (!ok) { photoFailed(round); return; }
+    showPhoto(round);
+    $('enlargeBtn').hidden = false;
+    game.phase = 'guess';
+  }
+
+  async function runFlash(round, token) {
+    $('stageBtn').disabled = true;
+    $('stageBtn').textContent = 'Loading…';
+    var ok = await round.loaded;
+    if (!game || game.idx !== token) return;
+    if (!ok) { photoFailed(round); return; }
+
+    showPhoto(round);
+    $('photo').classList.remove('is-flash');
+    void $('photo').offsetWidth;
+    $('photo').classList.add('is-flash');
+    await nextPaint();                 // start the clock only once the photo is actually on screen
+    await wait(settings.flash_ms);
+    if (!game || game.idx !== token) return;
+
+    setStage('Where was that?', 'Place your pin from memory.', null);
+    $('hint').textContent = 'Click the map to place your pin.';
+    game.phase = 'guess';
+  }
+
+  function submitGuess() {
+    if (!game || game.phase !== 'guess' || !game.guessMarker) return;
+    var round = game.rounds[game.idx];
+    var guess = game.guessMarker.getLatLng();
+    var answer = L.latLng(round.loc.lat, round.loc.lng);
+    var distance = guess.distanceTo(answer);
+    var points = scoreFor(distance);
+
+    game.phase = 'result';
+    game.total += points;
+    game.results.push({ loc: round.loc, distance: distance, points: points });
+    game.guessMarker.dragging.disable();
+
+    L.polyline([guess, answer], { color: '#14213d', weight: 3, dashArray: '6 8' }).addTo(overlay);
+    L.marker(answer, { icon: pinIcon('#17885c', '#fff'), keyboard: false, zIndexOffset: 500 }).addTo(overlay);
+    map.setMinZoom(0);
+    map.setMaxBounds(null);
+    map.fitBounds(L.latLngBounds([guess, answer]).pad(0.35), { maxZoom: 18.5 });
+
+    showPhoto(round);                  // in Flash mode this is the reveal
+    $('enlargeBtn').hidden = false;
+    $('scoreNow').textContent = fmt(game.total);
+    $('resultPoints').textContent = '+' + fmt(points);
+    $('resultDetail').textContent = round.loc.name ? fmtDist(distance) + ' from ' + round.loc.name : fmtDist(distance) + ' away';
+    $('hint').hidden = true;
+    $('result').hidden = false;
+    $('guessBtn').hidden = true;
+    $('nextBtn').hidden = false;
+    $('nextBtn').textContent = game.idx + 1 < game.rounds.length ? 'Next photo' : 'See your results';
+    $('nextBtn').focus();
+  }
+
+  function advance() {
+    game.idx += 1;
+    if (game.idx < game.rounds.length) startRound(); else showFinal();
+  }
+
+  function showFinal() {
+    var played = game.results.filter(function (r) { return !r.skipped; });
+    var max = played.length * MAX_POINTS;
+    var mode = game.mode;
+    var previous = getBest(mode);
+    $('finalHeading').textContent = settings.game_title + (mode === 'flash' ? ', Flash mode' : ', Normal mode');
+    $('finalTotal').textContent = fmt(game.total);
+    $('finalOf').textContent = 'out of ' + fmt(max) + ' points';
+    if (game.total > previous) {
+      setBest(mode, game.total);
+      $('finalBest').textContent = previous ? 'New personal best. Your old one was ' + fmt(previous) + '.' : '';
+    } else {
+      $('finalBest').textContent = 'Your best in this mode: ' + fmt(previous);
+    }
+
+    var list = $('finalRounds');
+    list.textContent = '';
+    game.results.forEach(function (r, i) {
+      var li = document.createElement('li');
+      var img = document.createElement('img');
+      img.src = r.loc.url; img.alt = '';
+      var where = document.createElement('div');
+      where.className = 'where';
+      var b = document.createElement('b');
+      b.textContent = r.loc.name || 'Photo ' + (i + 1);
+      var s = document.createElement('span');
+      s.textContent = r.skipped ? 'Didn’t load, not counted' : fmtDist(r.distance) + ' away';
+      where.append(b, s);
+      var pts = document.createElement('div');
+      pts.className = 'pts';
+      pts.textContent = r.skipped ? '–' : fmt(r.points);
+      li.append(img, where, pts);
+      list.append(li);
+    });
+    show('final');
+    game.phase = 'done';
+  }
+
+  function setFull(on) {
+    $('photo').classList.toggle('is-full', on);
+    $('enlargeBtn').textContent = on ? 'Close' : 'Enlarge photo';
+  }
+
+  // ---------- Buttons ----------
+
+  document.querySelectorAll('.mode').forEach(function (btn) {
+    btn.addEventListener('click', function () { startGame(btn.dataset.mode); });
+  });
+  $('guessBtn').addEventListener('click', submitGuess);
+  $('nextBtn').addEventListener('click', advance);
+  $('quitBtn').addEventListener('click', function () {
+    if (game && game.results.length && !confirm('Quit this game? Your score so far will be lost.')) return;
+    game = null;
+    setFull(false);
+    showHome();
+  });
+  $('againBtn').addEventListener('click', function () { startGame(game.mode); });
+  $('homeBtn').addEventListener('click', function () { game = null; showHome(); });
+  $('enlargeBtn').addEventListener('click', function () { setFull(!$('photo').classList.contains('is-full')); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') setFull(false);
+  });
+
+  boot();
+})();
+</script>
+</body>
+</html>
